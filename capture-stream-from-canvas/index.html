@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>capture stream from canvas</title>
+        <style>
+
+        </style>
+    </head>
+    <body>
+        <canvas id="myCanvas"></canvas>
+    </body>
+    <script type="text/javascript">
+        var myCanvas = document.getElementById('myCanvas');
+        var myCanvasCtx = myCanvas.getContext('2d');
+        var stream;
+        var docUrl = 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/captureStream';
+        document.addEventListener('DOMContentLoaded', function(){
+            myCanvas.width = 100;
+            myCanvas.height = 100;
+            var img = new Image();
+            img.src = '../assets/luobin.jpg';
+            img.alt = 'alt text';
+            img.style.display = 'none';
+
+            img.onload = function(){
+                myCanvas.width = img.width;
+                myCanvas.height = img.height;
+                myCanvasCtx.drawImage(img,0,0);
+
+                if(myCanvas.captureStream){
+                    stream = myCanvas.captureStream(25); // 25 FPS
+                }else{
+                    alert('HTMLCanvasElement.captureStream() is not support at current browser!');
+                    window.open(docUrl, '_blank')
+                }
+            }
+        });
+    </script>
+</html>
