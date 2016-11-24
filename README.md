@@ -13,6 +13,8 @@ Docs, demos, thinking...
 ## Samples
 
 * [Media stream](https://rawgit.com/wangpin34/learn-webrtc/master/media-stream/index.html)
+* [Peer connection](https://rawgit.com/wangpin34/learn-webrtc/master/peer-connection/index.html)
+* [Data channel](https://rawgit.com/wangpin34/learn-webrtc/master/data-channel/index.html)
 
 ### Others
 * [Capture stream from canvas](https://rawgit.com/wangpin34/learn-webrtc/master/capture-stream-from-canvas/index.html)
