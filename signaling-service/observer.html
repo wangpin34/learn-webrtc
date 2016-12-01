@@ -8,30 +8,23 @@
     <title>Realtime communication with WebRTC</title>
     <link rel="stylesheet" href="/css/main.css" />
     <style>
-        video, canvas{
-            max-width: 100%;
-            width: 320px;
-        }
+        
     </style>
 </head>
 
 <body>
 
-    <div id="videoCanvas">
-      <video id="camera" autoplay></video>
-      <canvas id="photo"></canvas>
-    </div>
+    <div id="incoming">
+      <h2>Incoming photos</h2>
+      <div id="trail">
 
-    <div id="buttons">
-      <button id="snap">Snap</button>
-      <br/>
-      <button id="send">Send</button>
+      </div>
     </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/lib/adapter.js"></script>
   <script src="js/lib/common.js"></script>
-  <script src="js/subject.js"></script>
+  <script src="js/observer.js"></script>
 
 </body>
 

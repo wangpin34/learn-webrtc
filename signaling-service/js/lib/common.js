@@ -24,3 +24,21 @@ function trace(arg) {
   var now = (window.performance.now() / 1000).toFixed(3);
   console.log(now + ': ', arg);
 }
+
+function drawImageFromDataURI(dataURI){
+    if(!dataURI){
+        throw 'dataURI is undefined'
+    }
+    var img = document.createElement('img');
+    img.src = dataURI;
+    return img;
+}
+
+const clientLog = (msg, type = '') => {
+    switch(type){
+        case 'log': console.log('Message from client: %s', msg); break;
+        case 'warn': console.warn('Message from client: %s', msg); break;
+        case 'error': console.error('Message from client: %s', msg); break;
+        default: console.info('Message from client: %s', msg);
+    }
+}
