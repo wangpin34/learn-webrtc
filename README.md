@@ -15,6 +15,7 @@ Docs, demos, thinking...
 * [Media stream](https://rawgit.com/wangpin34/learn-webrtc/master/media-stream/index.html)
 * [Peer connection](https://rawgit.com/wangpin34/learn-webrtc/master/peer-connection/index.html)
 * [Data channel](https://rawgit.com/wangpin34/learn-webrtc/master/data-channel/index.html)
+* [Signaling service](https://github.com/wangpin34/learn-webrtc/blob/master/signaling-service/README.md)
 
 ### Others
 * [Capture stream from canvas](https://rawgit.com/wangpin34/learn-webrtc/master/capture-stream-from-canvas/index.html)
