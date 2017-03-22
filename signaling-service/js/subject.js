@@ -4,14 +4,12 @@
 
 var room = 'f';
 var sendChannel = null;
+var sendPictureChannel = null;
 var localConnection = null;
 var localStream = null;
 var videoDiv = document.querySelector('#videoCanvas');
 var buttonsDiv = document.querySelector('#buttons');
 var videoElement = document.getElementById('camera');
-var photoCanvas = document.getElementById('photo');
-var photoCanvasCtx = photoCanvas.getContext('2d');
-var photoDataURI = null;
 var snapBtn = document.getElementById('snap');
 var sendBtn = document.getElementById('send');
 var socket = io.connect();
@@ -40,7 +38,7 @@ socket.on('log', function(array) {
   console.log.apply(console, array);
 });
 
-const startVideo = () => {
+function startVideo() {
     return navigator.mediaDevices.getUserMedia({
       audio: false,
       video: true
@@ -57,63 +55,77 @@ const startVideo = () => {
 }
 
 const snap = (e) => {
-    photoCanvas.width = videoElement.clientWidth;
-    photoCanvas.height = videoElement.clientHeight;
-    photoCanvasCtx.drawImage(videoElement, 0, 0, photoCanvas.width, photoCanvas.height);
-    photoDataURI = photoCanvas.toDataURL('image/jpeg');
+    var canvas = document.createElement('canvas');
+    canvas.width = videoElement.clientWidth;
+    canvas.height = videoElement.clientHeight;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    var dataURL = canvas.toDataURL('image/png');
+
+    var targetImage = document.querySelector('img[name=captured]');
+    targetImage.width = videoElement.clientWidth;
+    targetImage.height = videoElement.clientHeight;
+    targetImage.src = dataURL;
 }
 
 const createConnection = () => {
 
-    var servers = {
-    "iceServers": [{
-        "url": "stun:stun.l.google.com:19302"
-    }]
-    },
-    pcConstraint = null,
-    dataConstraint = null,
-    offerOptions = {
-      offerToReceiveAudio: 1,
-      offerToReceiveVideo: 1
-    };
-
-    clientLog('Using SCTP based data channels');
-    localConnection = new RTCPeerConnection(servers, pcConstraint);
+    var candidateFired = false;
+    localConnection = createPeerConnection();
+    localConnection.oniceconnectionstatechange = function(e){
+        console.log('iceConnection state: %s',localConnection.iceConnectionState);
+        if(localConnection.iceConnectionState === 'disconnected'){
+            localConnection.close();
+            createConnection();
+        }
+    }
+    localConnection.onsignalingstatechange = function(e){
+        console.log('signaling state: %s',localConnection.iceConnectionState);
+    }
     localConnection.onicecandidate = function(event){
-        clientLog('onicecandidate is fired!!!')
-        if(event.candidate){
+        //http://stackoverflow.com/questions/27926984/webrtc-onicecandidate-fires-21-times-is-it-ok
+        if(candidateFired) return;
+        if(event.candidate && isInnerCandidate(event.candidate.candidate)){
+            console.log(event.candidate.candidate);
+            candidateFired = true;
             socket.emit('candidate from creator', event.candidate, room);
         }
     };
-
-    const createChannel = () => {
-        clientLog('Start create data channel');
-        sendChannel = localConnection.createDataChannel('sendDataChannel', dataConstraint);
-        sendChannel.onopen = function onSendChannelStateChange(){
-             if (sendChannel.readyState === "open") {
+    function initDataChannel() {
+        sendChannel = createDataChannel(localConnection, 'sendMsgChannel', function onopen(){
+            if(this.readyState === "open") {
                 clientLog('Local channel is opened');
-              }
-         };
-        sendChannel.onclose = function onSendChannelStateChange(){
+            }
+        }, function onclose(){
             clientLog('Local channel is closed');
-        };
+        });
     }
 
-    createChannel();
+    function initPictureChannel(){
+        sendPictureChannel = createDataChannel(localConnection, 'sendPictureChannel', function onopen(){
+            if(this.readyState === "open") {
+                clientLog('Local channel is opened');
+            }
+        }, function onclose(){
+            clientLog('Local channel is closed');
+        });
+    }
 
-    localConnection.createOffer(offerOptions).then(function(desc){
+    initDataChannel();
+    initPictureChannel();
+    
+    //The offer should be created after init data channel, or data channel will not be opened. ???
+    createOffer(localConnection).then(function(desc){
         localConnection.setLocalDescription(desc).then(
-          function() {
-             socket.emit('desc from creator', desc, room);
-             clientLog('LocalConnection setLocalDescription complete');
-          },
-          function() {
-             clientLog('LocalConnection setLocalDescription failed');
-          }
+            function() {
+                socket.emit('desc from creator', desc, room);
+                clientLog('LocalConnection setLocalDescription complete');
+            },
+            function() {
+                clientLog('LocalConnection setLocalDescription failed');
+            }
         );
-    });
-
-
+    })
 
     socket.on('desc from participant', (desc, room) => {
         clientLog('Receive desc from participant and then set as RemoteDescription');
@@ -124,24 +136,48 @@ const createConnection = () => {
         });
     });
 
-    socket.on('candidate from participant', (candidate, room) =>{
+    socket.on('candidate from participant', (candidate, room) => {
         clientLog('Receive candidate from participant')
         localConnection.addIceCandidate(new RTCIceCandidate(candidate))
-                        .then(() => {
-                            clientLog('Add candidate successfully');
-                        }, err => {
-                            clientLog(err, 'error');
-                        });
-
+            .then(() => {
+                clientLog('Add candidate successfully');
+            }, err => {
+                clientLog(err, 'error');
+            });
     });
 
 }
 
-const sendImg = () => {
-    if(photoDataURI && sendChannel && sendChannel.readyState === 'open'){
-        sendChannel.send(photoDataURI);
+
+function sendPicture(imageElement){
+    if(!(imageElement instanceof HTMLElement)){
+        throw new Error('Please provide a valid image element');
+    }
+    if(sendPictureChannel && sendPictureChannel.readyState === 'open'){
+        var canvas = document.createElement('canvas');
+        canvas.width = imageElement.width;
+        canvas.height = imageElement.height;
+
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(imageElement, 0, 0);
+        var dataURL = canvas.toDataURL("image/png");
+        sendPictureChannel.send(dataURL);
+        sendPictureChannel.send('\n');
+    }
+}
+
+function sendMsg(msg){
+    if(sendChannel && sendChannel.readyState === 'open'){
+        sendChannel.send(JSON.stringify({ type: 'message', content: msg }));
     }
 }
 
 snapBtn.addEventListener('click', snap);
-sendBtn.addEventListener('click', sendImg);
+sendBtn.addEventListener('click', function(){
+    sendPicture(document.querySelector('img[name=captured]'));
+});
+document.getElementById('sendPicture').addEventListener('click', function(){
+    var chatbox = document.querySelector('#chatbox');
+    sendMsg(chatbox.value);
+    chatbox.value = '';
+});

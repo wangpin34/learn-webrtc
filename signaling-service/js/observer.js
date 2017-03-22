@@ -17,6 +17,18 @@ socket.on('full', function(room) {
   clientLog('Message from client: Room ' + room + ' is full :^(');
 });
 
+function handleMsg(msg){
+    var element = document.createElement('h7');
+    element.innerHTML = msg;
+    trail.appendChild(element);
+}
+
+function handlePicture(dataURL){
+    var element = document.createElement('img');
+    element.src = dataURL;
+    trail.appendChild(element);
+}
+
 const createConnection = () => {
     var servers = {
             "iceServers": [{
@@ -26,7 +38,7 @@ const createConnection = () => {
         pcConstraint = null,
         dataConstraint = null;
 
-    localConnection = new RTCPeerConnection(servers, pcConstraint);
+    localConnection = createPeerConnection();
     localConnection.onopen = function(e){
         clientLog('peerconnection is opened.');
     }
@@ -40,9 +52,24 @@ const createConnection = () => {
     localConnection.ondatachannel = function receiveChannelCallback(event){
         clientLog('Get a channel from remote');
         var channel = event.channel;
-        channel.onmessage = function(message){
-            clientLog('New channel message is coming.');
-            trail.appendChild(drawImageFromDataURI(message.data))
+        var label = channel.label;
+
+        if(label === 'sendPictureChannel'){
+            var imageData = '';
+            channel.onmessage = function(result){
+                imageData += result.data;
+                //Paint the whole image data till reach the end '\n'
+                if(result.data === '\n'){
+                    handlePicture(imageData);
+                    imageData = ''; 
+                }
+            }
+        }
+
+        if(label === 'sendMsgChannel'){
+            channel.onmessage = function(result){
+                handleMsg(result.data);
+            }
         }
 
         channel.onclose = function(){

@@ -99,24 +99,24 @@ io.sockets.on('connection', function(socket) {
   })
 
   socket.on('candidate from creator', function(candidate, room){
-      log('Receive candidate of creator:' + JSON.stringify(candidate, null, 4) + ' room ' + room);
+      //log('Receive candidate of creator:' + JSON.stringify(candidate, null, 4) + ' room ' + room);
       rooms[room].creator.candidate = candidate;
   });
 
   socket.on('desc from creator', function(desc, room){
-      log('Receive desc of creator:\n' + JSON.stringify(desc, null, 4) + ' room ' + room);
+      //log('Receive desc of creator:\n' + JSON.stringify(desc, null, 4) + ' room ' + room);
       rooms[room].creator.desc = desc;
   })
 
   socket.on('candidate from participant', function(candidate, room){
       rooms[room].participant.candidate = candidate;
-      log('Receive candidate of participant:n' + candidate + ' room ' + room);
+      //log('Receive candidate of participant:n' + candidate + ' room ' + room);
       io.sockets.in(room).emit('candidate from participant', candidate, room);
   });
 
   socket.on('desc from participant', function(desc, room){
       rooms[room].participant.desc = desc;
-      log('Receive desc of participant:' + desc + ' room ' + room)
+      //log('Receive desc of participant:' + desc + ' room ' + room)
       io.sockets.in(room).emit('desc from participant', desc, room);
   });
 

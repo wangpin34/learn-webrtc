@@ -19,13 +19,19 @@
 
     <div id="videoCanvas">
       <video id="camera" autoplay></video>
-      <canvas id="photo"></canvas>
+      <image name="captured"/>
+    </div>
+
+    <div>  
+        <textarea id="chatbox"></textarea>
     </div>
 
     <div id="buttons">
       <button id="snap">Snap</button>
       <br/>
-      <button id="send">Send</button>
+      <button id="send">Send Picture</button>
+      <br/>
+      <button id="sendPicture">Send Message</button>
     </div>
 
   <script src="/socket.io/socket.io.js"></script>
