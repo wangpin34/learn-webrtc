@@ -5,21 +5,28 @@
 
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realtime communication with WebRTC</title>
+    <title>Observer</title>
     <link rel="stylesheet" href="/css/main.css" />
-    <style>
-        
-    </style>
+    <link rel="stylesheet" href="/css/icons.css" />
 </head>
 
 <body>
 
-    <div id="incoming">
-      <h2>Incoming photos</h2>
-      <div id="trail">
-
-      </div>
+    <div class="app">
+        <div id="msgs" class="msgs"></div>
+        <div class="input-box">
+            <div class="tools">
+                <i class="icon icon-camera"></i>
+                <i id="pick-image" class="icon icon-image"></i>
+            </div>
+            <div id="input" class="input" contenteditable="true"></div>
+            <div class="buttons"><button id="send">发送</button><div>
+        <div>
     </div>
+
+    <form name="hideForm" style="display:none;">
+        <input type="file" name="image"/>
+    </form>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/lib/adapter.js"></script>

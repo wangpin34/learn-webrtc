@@ -1,18 +1,18 @@
 'use strict';
 
-var os = require('os');
-var nodeStatic = require('node-static');
-var http = require('http');
-var socketIO = require('socket.io');
+const os = require('os');
+const nodeStatic = require('node-static');
+const http = require('http');
+const socketIO = require('socket.io');
 
-var fileServer = new(nodeStatic.Server)();
-var app = http.createServer(function(req, res) {
+const fileServer = new(nodeStatic.Server)();
+const app = http.createServer(function(req, res) {
   fileServer.serve(req, res);
 }).listen(8080);
 
-var rooms = {};
+const rooms = {};
 
-var io = socketIO.listen(app);
+const io = socketIO.listen(app);
 io.sockets.on('connection', function(socket) {
 
   // convenience function to log server messages on the client
@@ -22,104 +22,70 @@ io.sockets.on('connection', function(socket) {
     socket.emit('log', array);
   }
 
-  socket.on('message', function(message) {
-    log('Client said: ', message);
-    // for a real app, would be room-only (not broadcast)
-    socket.broadcast.emit('message', message);
-  });
-
-  socket.on('create or join', function(room) {
-    log('Received request to create or join room ' + room);
-
-    var numClients = io.sockets.sockets.length;
-
-    log('Room ' + room + ' now has ' + numClients + ' client(s)');
-
-    if (numClients === 1) {
-      rooms[room] = { creator: {}};
-      socket.join(room);
-      log('Client ID ' + socket.id + ' created room ' + room, JSON.stringify(rooms[room]));
-      socket.emit('created', room, socket.id);
-  } else if (numClients === 10) {
-      let roomMeta = rooms[room];
-      log('Client ID ' + socket.id + ' joined room ' + room);
-      io.sockets.in(room).emit('join', room);
-      socket.join(room);
-      socket.emit('joined', room, socket.id);
-      io.sockets.in(room).emit('ready');
-      if(roomMeta){
-          roomMeta.participant = {};
-          if(roomMeta.creator){
-              if(roomMeta.creator.desc){
-                  io.sockets.in(room).emit('desc from creator', rooms[room].creator.desc, room);
-              }
-              if(roomMeta.creator.candidate){
-                  io.sockets.in(room).emit('candidate from creator', rooms[room].creator.candidate, room);
-              }
-          }
+  socket.on('create-or-join', function(roomName, clientID) {
+    let room;
+    if(!rooms[roomName]){
+      rooms[roomName] = [];
+      room = rooms[roomName];
+    }else{
+      room = rooms[roomName];
+    }
+    let roomatesNum = room.length;
+    console.log(`ClientID : ${clientID}`);
+    if(roomatesNum.length > 1){
+      socket.emit('full', roomName);
+      return;
+    }else{
+      //Add the client to room
+      if(!room.find(function(client){
+        return client.id === clientID;
+      })){
+        room.push({ id: clientID });
+        socket.join(roomName);
+        console.log(`Init chair in room ${roomName} for ${clientID}`);
+        console.log(`Roomats number ${room.length}`);
       }
-    } else { // max two clients
-      socket.emit('full', room);
+
+      io.sockets.in(roomName).emit('inited', clientID);
+      if(room.length > 1){
+        console.log('Send hoster info to new joiner');
+        let hoster = room[0];
+        io.sockets.in(roomName).emit('got-hoster-info', hoster);
+      }
     }
   });
 
-  socket.on('create', function(room){
-      log('Received request to create room ' + room);
-      rooms[room] = { creator: {}};
-      socket.join(room);
-      log('Client ID ' + socket.id + ' created room ' + room, JSON.stringify(rooms[room]));
-      socket.emit('created', room, socket.id);
-  });
+  //Only fired after join the room
+  socket.on('upload-candidate', function(roomName, clientID, candidate){
+    let room = rooms[roomName];
+    let myself = room.filter(function(client){
+        return client.id === clientID;
+    })[0];
 
-  socket.on('join', function(room){
-      var numClients = io.sockets.sockets.length;
-      log('Room ' + room + ' now has ' + numClients + ' client(s)');
-      if (numClients <= 10) {
-          let roomMeta = rooms[room];
-          log('Client ID ' + socket.id + ' joined room ' + room);
-          io.sockets.in(room).emit('join', room);
-          socket.join(room);
-          socket.emit('joined', room, socket.id);
-          io.sockets.in(room).emit('ready');
-          if(roomMeta){
-              roomMeta.participant = {};
-              if(roomMeta.creator){
-                  console.log(JSON.stringify(roomMeta.creator, null, 4));
-                  if(roomMeta.creator.desc){
-                      io.sockets.in(room).emit('desc from creator', rooms[room].creator.desc, room);
-                  }
-                  if(roomMeta.creator.candidate){
-                      io.sockets.in(room).emit('candidate from creator', rooms[room].creator.candidate, room);
-                  }
-              }
-          }
-      }else{
-          socket.emit('full', room);
-      }
+    myself.candidate = candidate;
+
+    io.sockets.in(roomName).emit('new-roomate', clientID, myself);
   })
 
-  socket.on('candidate from creator', function(candidate, room){
-      //log('Receive candidate of creator:' + JSON.stringify(candidate, null, 4) + ' room ' + room);
-      rooms[room].creator.candidate = candidate;
-  });
+  socket.on('upload-desc', function(roomName, clientID, desc){
+    let room = rooms[roomName];
+    let myself = room.filter(function(client){
+        return client.id === clientID;
+    })[0];
 
-  socket.on('desc from creator', function(desc, room){
-      //log('Receive desc of creator:\n' + JSON.stringify(desc, null, 4) + ' room ' + room);
-      rooms[room].creator.desc = desc;
+    myself.desc = desc;
+    io.sockets.in(roomName).emit('new-roomate', clientID, myself);
   })
 
-  socket.on('candidate from participant', function(candidate, room){
-      rooms[room].participant.candidate = candidate;
-      //log('Receive candidate of participant:n' + candidate + ' room ' + room);
-      io.sockets.in(room).emit('candidate from participant', candidate, room);
-  });
+  socket.on('fetch-others-info', function(roomName){
+    let clientID = socket.id;
+    let room = rooms[roomName];
+    let friends = room.filter(function(client){
+        return client.id !== clientID;
+    });
 
-  socket.on('desc from participant', function(desc, room){
-      rooms[room].participant.desc = desc;
-      //log('Receive desc of participant:' + desc + ' room ' + room)
-      io.sockets.in(room).emit('desc from participant', desc, room);
-  });
-
+    io.sockets.in(roomName).emit('fetched-others-info', roomName, friends);
+  })
 
   socket.on('ipaddr', function() {
     var ifaces = os.networkInterfaces();

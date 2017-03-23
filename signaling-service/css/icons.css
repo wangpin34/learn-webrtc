@@ -1,0 +1,18 @@
+.icon {
+    cursor: pointer;
+    background-repeat: no-repeat;
+    background-size: 24px 24px;
+    background-clip: border-box;
+    background-position: center;
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+}
+
+.icon-camera {
+    background-image: url(../assets/icons/ic_camera_enhance_24px.svg);
+}
+
+.icon-image {
+    background-image: url(../assets/icons/ic_image_24px.svg);
+}
