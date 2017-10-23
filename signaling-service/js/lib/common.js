@@ -73,9 +73,16 @@ function createOffer(peerConnection, enableAudio, enableVideo){
   if(!(peerConnection instanceof RTCPeerConnection)){
       throw new Error('PeerConnection is not valid');
   }
-    var offerOptions = {
-        offerToReceiveAudio: typeof enableAudio === 'undefined' ? 1 : enableAudio,
-        offerToReceiveVideo: typeof enableVideo === 'undefined' ? 1 : enableVideo
-    };
-  return peerConnection.createOffer(offerOptions);
+  var options = {
+      offerToReceiveAudio: typeof enableAudio === 'undefined' ? 1 : enableAudio,
+      offerToReceiveVideo: typeof enableVideo === 'undefined' ? 1 : enableVideo
+  };
+  return peerConnection.createOffer(options);
+}
+
+function createAnswer(peerConnection){
+  if(!(peerConnection instanceof RTCPeerConnection)){
+      throw new Error('PeerConnection is not valid');
+  }
+  return peerConnection.createAnswer();
 }

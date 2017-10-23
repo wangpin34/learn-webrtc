@@ -5,6 +5,12 @@ html, body {
     padding: 0;
 }
 
+.status-panel {
+    width: 320px;
+    margin: 0 auto;
+    text-align: center;
+}
+
 #trail img {
     margin: 10px;
 }

@@ -1,33 +1,47 @@
 'use strict';
+
+//window.room = prompt("Enter room name:");
+
 var room = 'f';
 var clientID = 'observer';
-var socket = io.connect();
+var dataChannel = null;
+var pictureChannel = null;
 var localConnection = null;
-var trail = document.querySelector('#trail');
+var localStream = null;
+var socket = io.connect();
 
 if (room !== "") {
-  clientLog('Asking to join room ' + room);
+  console.log('Message from client: Asking to join room ' + room);
   socket.emit('create-or-join', room, clientID);
 }
 
-socket.on('inited', function(room, clientId){
-  console.log('Joined to room');
+socket.on(`client-${clientID}-inited`, function(){
+  console.log(`Joined to room(${room})`);
   createConnection();
 })
 
-socket.on('full', function(room){
-  clientLog('Message from client: Room ' + room + ' is full :^(');
+socket.on('full', function(room) {
+  console.log('Message from client: Room ' + room + ' is full :^(');
 })
 
-var dataChannel = null;
-var pictureChannel = null;
+const snap = (e) => {
+    var canvas = document.createElement('canvas');
+    canvas.width = videoElement.clientWidth;
+    canvas.height = videoElement.clientHeight;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    var dataURL = canvas.toDataURL('image/png');
+
+    var targetImage = document.querySelector('img[name=captured]');
+    targetImage.width = videoElement.clientWidth;
+    targetImage.height = videoElement.clientHeight;
+    targetImage.src = dataURL;
+}
 
 function createConnection(){
 
+    var candidateFired = false;
     localConnection = createPeerConnection();
-    localConnection.onopen = function(e){
-        clientLog('peerconnection is opened.');
-    }
     localConnection.oniceconnectionstatechange = function(e){
         console.log('iceConnection state: %s',localConnection.iceConnectionState);
         if(localConnection.iceConnectionState === 'disconnected'){
@@ -35,79 +49,107 @@ function createConnection(){
             createConnection();
         }
     }
+    localConnection.onsignalingstatechange = function(e){
+        console.log('signaling state: %s',localConnection.iceConnectionState);
+    }
     localConnection.onicecandidate = function(event){
-        clientLog('onicecandidate is fired!!!');
+        //http://stackoverflow.com/questions/27926984/webrtc-onicecandidate-fires-21-times-is-it-ok
+        if(candidateFired) return;
         if(event.candidate){
+            console.log(event.candidate.candidate);
+            candidateFired = true;
             socket.emit('upload-candidate', room, clientID, event.candidate);
         }
     };
+    function initDataChannel() {
+        localConnection.ondatachannel = function receiveChannelCallback(event){
+          var channel = event.channel;
+          channel.onmessage = function(message){
+              var data =  JSON.parse(message.data);
+              var content = data.content;
+              console.log('Received message: ' + content);
+              handleMsg(content);
+          }
+          channel.onclose = function(){
+              console.log('Remote channel is closed');
+          }
+        }
+    }
 
-    localConnection.ondatachannel = function receiveChannelCallback(event){
-        clientLog('Get a channel from remote');
-        var channel = event.channel;
-        var label = channel.label;
-
-        if(label === 'pictureChannel'){
-            pictureChannel = channel;
-            var imageData = '';
-            channel.onmessage = function(result){
-                imageData += result.data;
-                //Paint the whole image data till reach the end '\n'
-                if(result.data === '\n'){
-                    handlePicture(imageData);
-                    imageData = '';
-                }
+    function initPictureChannel(){
+        pictureChannel = createDataChannel(localConnection, 'pictureChannel', function onopen(){
+            if(this.readyState === "open") {
+                console.log('Local channel is opened');
             }
-        }
-
-        if(label === 'dataChannel'){
-            dataChannel = channel;
-            channel.onmessage = function(result){
-                handleMsg(result.data);
-            }
-        }
-
-        channel.onclose = function(){
-             clientLog('Remote channel is closed');
-        }
-    };
-
-    socket.on('got-hoster-info', function(hoster){
-      console.log('Received hoster info');
-      localConnection.setRemoteDescription(hoster.desc);
-      localConnection.createAnswer().then(function(desc){
-          localConnection.setLocalDescription(desc);
-          socket.emit('upload-desc', room, clientID, desc);
-      });
-      localConnection.addIceCandidate(new RTCIceCandidate(hoster.candidate));
-    })
-
-    socket.on('desc from creator', function(desc, room){
-        localConnection.setRemoteDescription(desc);
-        localConnection.createAnswer().then(function(desc){
-            localConnection.setLocalDescription(desc);
-            socket.emit('upload-desc', room, clientID, desc);
+        }, function onclose(){
+            console.log('Local channel is closed');
         });
-    });
-    socket.on('candidate from creator', (candidate, room) => {
-        localConnection.addIceCandidate(new RTCIceCandidate(candidate));
+
+        var imageData = '';
+        pictureChannel.onmessage = function(result){
+            imageData += result.data;
+            //Paint the whole image data till reach the end '\n'
+            if(result.data === '\n'){
+                handlePicture(imageData);
+                imageData = '';
+            }
+        }
+    }
+
+    initDataChannel();
+
+    var isDescInited = false;
+    var isCanInited = false;
+    socket.on('room-change', function(room){
+      
+      var friend = room.find(function(man){
+        return man.id != clientID;
+      })
+
+      if(friend && friend.desc && !isDescInited){
+        isDescInited = true;
+
+        localConnection.setRemoteDescription(friend.desc).then(function(){
+          console.log('Set remote desc successfully');
+        }, function(err){
+          console.error('Set remote desc failed');
+          console.error(err);
+        })
+
+        createAnswer(localConnection).then(function(desc){
+          console.log('Create answer successfully.');
+
+          localConnection.setLocalDescription(desc).then(
+            function() {
+              console.log('Set local desc successfully.')
+            },
+            function(){
+              console.error('Set local desc failed!')
+            }
+          )
+
+          socket.emit('upload-answer', 'f', clientID, desc);
+        },
+        function(err){
+          console.error('Create answer failed.');
+          console.error(err);
+        })
+      }
+
+      if(friend && friend.candidate) {
+        isCanInited = true;
+        localConnection.addIceCandidate(new RTCIceCandidate(friend.candidate)).then(function(){
+          console.log('Set remote candidate successfully');
+        }, function(err){
+          console.error('Set remote candidate failed');
+          console.error(err);
+          friendInited = false;
+        })
+      }
     })
+
 }
 
-var msgsBox = document.getElementById('msgs');
-
-function handleMsg(msg){
-    var element = document.createElement('h7');
-    element.innerHTML = msg;
-    msgsBox.appendChild(element);
-}
-
-function handlePicture(dataURL){
-    var element = document.createElement('img');
-    element.src = dataURL;
-    element.style.width = '100px';
-    msgsBox.appendChild(element);
-}
 
 function sendPicture(imageElement){
     if(!(imageElement instanceof HTMLElement)){
@@ -168,6 +210,20 @@ function getDataURLfromImage(imageElement){
     return dataURL;
 }
 
+var msgsBox = document.getElementById('msgs');
+
+function handleMsg(msg){
+    var element = document.createElement('h7');
+    element.innerHTML = msg;
+    msgsBox.appendChild(element);
+}
+
+function handlePicture(dataURL){
+    var element = document.createElement('img');
+    element.src = dataURL;
+    element.style.width = '100px';
+    msgsBox.appendChild(element);
+}
 
 function addToHistory(msg){
     msgsBox.innerHTML = msgsBox.innerHTML + msg;

@@ -9,22 +9,35 @@ var pictureChannel = null;
 var localConnection = null;
 var localStream = null;
 var socket = io.connect();
+var connectBtn = document.getElementById('connectBtn');
 
-if (room !== "") {
-  clientLog('Message from client: Asking to join room ' + room);
+if (room !== '') {
+  console.log('Asking to join room ' + room);
   socket.emit('create-or-join', room, clientID);
 }
 
-socket.on('inited', function(){
-  console.log('Joined to room');
+
+socket.on(`client-${clientID}-inited`, function(){
+  console.log(`Joined to room(${room})`);
+//   connectBtn.disabled = false;
+//   var handleConnect = function(){
+//       createConnection();
+//       connectBtn.disabled = true;
+//       connectBtn.innerText = '连接中';
+//       connectBtn.removeEventListener('click', handleConnect);
+//   }
+//   connectBtn.addEventListener('click', handleConnect);
+
   createConnection();
 })
 
-socket.on('full', function(room) {
-  clientLog('Message from client: Room ' + room + ' is full :^(');
+socket.on('full', function(roomName) {
+  if(room === roomName){
+    console.log(`Room(${room} is full)`);
+  }
 })
 
-const snap = (e) => {
+function snap(e) {
     var canvas = document.createElement('canvas');
     canvas.width = videoElement.clientWidth;
     canvas.height = videoElement.clientHeight;
@@ -42,20 +55,26 @@ function createConnection(){
 
     var candidateFired = false;
     localConnection = createPeerConnection();
+    updateConnState(localConnection.iceConnectionState);
     localConnection.oniceconnectionstatechange = function(e){
         console.log('iceConnection state: %s',localConnection.iceConnectionState);
+        updateConnState(localConnection.iceConnectionState);
         if(localConnection.iceConnectionState === 'disconnected'){
             localConnection.close();
-            createConnection();
+        }
+
+        if(localConnection.iceConnectionState === 'connected'){
+          connectBtn.innerText = '已连接';
         }
     }
     localConnection.onsignalingstatechange = function(e){
-        console.log('signaling state: %s',localConnection.iceConnectionState);
+        console.log('signaling state: %s', localConnection.signalingState);
+        updateSignalingState(localConnection.signalingState);
     }
     localConnection.onicecandidate = function(event){
         //http://stackoverflow.com/questions/27926984/webrtc-onicecandidate-fires-21-times-is-it-ok
         if(candidateFired) return;
-        if(event.candidate && isInnerCandidate(event.candidate.candidate)){
+        if(event.candidate){
             console.log(event.candidate.candidate);
             candidateFired = true;
             socket.emit('upload-candidate', room, clientID, event.candidate);
@@ -64,24 +83,27 @@ function createConnection(){
     function initDataChannel() {
         dataChannel = createDataChannel(localConnection, 'dataChannel', function onopen(){
             if(this.readyState === "open") {
-                clientLog('Local channel is opened');
+                console.log('Local channel is opened');
             }
         }, function onclose(){
-            clientLog('Local channel is closed');
+            console.log('Local channel is closed');
         });
 
-        dataChannel.onmessage = function(result){
-            handleMsg(result.data);
+        dataChannel.onmessage = function(message){
+            var data =  JSON.parse(message.data);
+            var content = data.content;
+            console.log('Received message: ' + content);
+            handleMsg(content);
         }
     }
 
     function initPictureChannel(){
         pictureChannel = createDataChannel(localConnection, 'pictureChannel', function onopen(){
             if(this.readyState === "open") {
-                clientLog('Local channel is opened');
+                console.log('Local channel is opened');
             }
         }, function onclose(){
-            clientLog('Local channel is closed');
+            console.log('Local channel is closed');
         });
 
         var imageData = '';
@@ -96,63 +118,53 @@ function createConnection(){
     }
 
     initDataChannel();
-    initPictureChannel();
+    //initPictureChannel();
 
-    //The offer should be created after init data channel, or data channel will not be opened. ???
     createOffer(localConnection).then(function(desc){
         localConnection.setLocalDescription(desc).then(
             function() {
                 socket.emit('upload-desc', room, clientID, desc);
-                clientLog('LocalConnection setLocalDescription complete');
+                console.info('PC1 set local desc successfully.');
             },
             function() {
-                clientLog('LocalConnection setLocalDescription failed');
+                console.error('PC1 set local desc failed.');
             }
         );
     })
 
-    socket.on('new-roomate', function(id, info){
-      if(clientID === id){
-        console.log('Receive self info, ignored');
-        return;
-      }
-      if(info.desc && info.candidate){
 
-        localConnection.addIceCandidate(new RTCIceCandidate(candidate)).then(function(){
+    var isDescInited = false;
+    var isCanInited = false;
+
+    socket.on('answer', function(room){
+      var friend = room.find(function(man){
+        return man.id != clientID;
+      })
+
+      if(friend && friend.desc && !isDescInited){
+        isDescInited = true;
+
+        localConnection.setRemoteDescription(friend.desc).then(function(){
+            console.log('Set remote desc successfully');
+        }, function(err){
+          console.error('Set remote desc failed');
+          console.error(err);
+          friendInited = false;
+        })
+
+      }
+
+      if(friend && friend.candidate) {
+        isCanInited = true;
+        localConnection.addIceCandidate(new RTCIceCandidate(friend.candidate)).then(function(){
           console.log('Set remote candidate successfully');
         }, function(err){
           console.error('Set remote candidate failed');
           console.error(err);
-        })
-
-        localConnection.setRemoteDescription(desc).then(function(){
-          console.log('Set remote desc successfully');
-        }, function(err){
-          console.error('Set remote desc failed');
-          console.error(err);
+          friendInited = false;
         })
       }
     })
-
-
-    // socket.on('desc from participant', (desc, room) => {
-    //     clientLog('Receive desc from participant and then set as RemoteDescription');
-    //     localConnection.setRemoteDescription(desc).then(() => {
-    //         clientLog('Set remote desc successfully');
-    //     }, (err) => {
-    //         clientLog(err, 'error');
-    //     });
-    // });
-
-    // socket.on('candidate from participant', (candidate, room) => {
-    //     clientLog('Receive candidate from participant')
-    //     localConnection.addIceCandidate(new RTCIceCandidate(candidate))
-    //         .then(() => {
-    //             clientLog('Add candidate successfully');
-    //         }, err => {
-    //             clientLog(err, 'error');
-    //         });
-    // });
 
 }
 

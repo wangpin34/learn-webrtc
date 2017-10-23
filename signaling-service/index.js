@@ -1,101 +1,115 @@
 'use strict';
-
 const os = require('os');
 const nodeStatic = require('node-static');
 const http = require('http');
 const socketIO = require('socket.io');
 
-const fileServer = new(nodeStatic.Server)();
-const app = http.createServer(function(req, res) {
-  fileServer.serve(req, res);
-}).listen(8080);
-
+const PORT = 8080;
 const rooms = {};
+const maxMember = 2;
+
+const fileServer = new(nodeStatic.Server)();
+const app = http.createServer((req, res) => {
+  fileServer.serve(req, res);
+}).listen(PORT);
 
 const io = socketIO.listen(app);
-io.sockets.on('connection', function(socket) {
 
-  // convenience function to log server messages on the client
-  function log() {
+//Emit room change event 
+const updateRoom = (roomName, value) => {
+  rooms[roomName] = value;
+  console.log(`Emit room(${roomName}) change event`)
+  io.sockets.in(roomName).emit('room-change', value);  
+}
+
+io.sockets.on('connection', socket => {
+
+  const log = () => {
     var array = ['Message from server:'];
     array.push.apply(array, arguments);
     socket.emit('log', array);
   }
 
-  socket.on('create-or-join', function(roomName, clientID) {
-    let room;
-    if(!rooms[roomName]){
-      rooms[roomName] = [];
-      room = rooms[roomName];
-    }else{
-      room = rooms[roomName];
-    }
-    let roomatesNum = room.length;
-    console.log(`ClientID : ${clientID}`);
-    if(roomatesNum.length > 1){
-      socket.emit('full', roomName);
-      return;
-    }else{
-      //Add the client to room
-      if(!room.find(function(client){
-        return client.id === clientID;
-      })){
-        room.push({ id: clientID });
-        socket.join(roomName);
-        console.log(`Init chair in room ${roomName} for ${clientID}`);
-        console.log(`Roomats number ${room.length}`);
-      }
+  socket.on('create-or-join', (roomName, clientID) => {
 
-      io.sockets.in(roomName).emit('inited', clientID);
-      if(room.length > 1){
-        console.log('Send hoster info to new joiner');
-        let hoster = room[0];
-        io.sockets.in(roomName).emit('got-hoster-info', hoster);
-      }
+    console.log(`Income ClientID : ${clientID}`);
+    
+    let room;
+
+    //Create room if non-exists
+    if(!rooms[roomName]){
+      console.log(`Trying to create a new room ${roomName}`);
+      room = rooms[roomName] = [];
+    }else{
+      room = rooms[roomName];
     }
+
+    //Support two users in a room
+    if(room.length > maxMember){
+      console.log(`${roomName} is full`);
+      socket.emit('room-full', roomName);
+      return;
+    }
+
+    //Add client to room if he/she is not in room(For refresh, it's may be already in room)
+    if(!room.find(client => client.id === clientID)){
+      console.log('Trying to add client to room');
+      let client = { id: clientID };
+      room.push(client);
+      updateRoom(roomName, room);
+      console.log(`Init chair in room ${roomName} for ${clientID}`);
+      console.log(`Roomats number ${room.length}`);
+    }else{
+      console.log(`Client(${clientID}) is already in room(${roomName})`);
+    }
+
+    socket.join(roomName);
+    //Emit event that inited
+    io.sockets.in(roomName).emit(`client-${clientID}-inited`, clientID);
+    io.sockets.in(roomName).emit('room-change', room);  
+
+    console.log(room.map(r => {
+      return { id: r.id };
+    }));
+
   });
 
   //Only fired after join the room
-  socket.on('upload-candidate', function(roomName, clientID, candidate){
-    let room = rooms[roomName];
-    let myself = room.filter(function(client){
+  socket.on('upload-candidate', (roomName, clientID, candidate) => {
+    console.log(`Receive candidate info into room(${roomName}) from client(${clientID})`);
+    let room =  rooms[roomName];
+    let myself = room.find((client) => {
         return client.id === clientID;
-    })[0];
+    });
 
     myself.candidate = candidate;
 
-    io.sockets.in(roomName).emit('new-roomate', clientID, myself);
+    updateRoom(roomName, room);
+
   })
 
-  socket.on('upload-desc', function(roomName, clientID, desc){
+  socket.on('upload-desc', (roomName, clientID, desc) => {
+    console.log(`Receive desc info into room(${roomName}) from client(${clientID})`);
     let room = rooms[roomName];
-    let myself = room.filter(function(client){
+    let myself = room.find((client) => {
         return client.id === clientID;
-    })[0];
-
-    myself.desc = desc;
-    io.sockets.in(roomName).emit('new-roomate', clientID, myself);
-  })
-
-  socket.on('fetch-others-info', function(roomName){
-    let clientID = socket.id;
-    let room = rooms[roomName];
-    let friends = room.filter(function(client){
-        return client.id !== clientID;
     });
 
-    io.sockets.in(roomName).emit('fetched-others-info', roomName, friends);
+    myself.desc = desc;
+
+    updateRoom(roomName, room);
   })
 
-  socket.on('ipaddr', function() {
-    var ifaces = os.networkInterfaces();
-    for (var dev in ifaces) {
-      ifaces[dev].forEach(function(details) {
-        if (details.family === 'IPv4' && details.address !== '127.0.0.1') {
-          socket.emit('ipaddr', details.address);
-        }
-      });
-    }
-  });
+  socket.on('upload-answer', (roomName, clientID, desc) => {
+    console.log(`Receive answer into room(${roomName}) from client(${clientID})`);
+    let room = rooms[roomName];
+    let myself = room.find((client) => {
+        return client.id === clientID;
+    });
 
-});
+    myself.desc = desc;
+
+    io.sockets.in(roomName).emit(`answer`, room);
+  })
+
+})

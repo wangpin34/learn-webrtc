@@ -17,7 +17,15 @@
 </head>
 
 <body>
-
+    <div class="status-panel">
+        <span>Connection state: </span><span id="conn-state"></span>
+        <br/>
+        <span>signaling state: </span><span id="signaling-state"></span>
+        <br/>
+        <span>data channel state: </span><span id="data-channel-state"></span>
+        <br/>
+        <button id="connectBtn" disabled>连接</button>
+    </div>
     <div class="app">
         <div id="msgs" class="msgs"></div>
         <div class="input-box">
@@ -33,27 +41,10 @@
     <form name="hideForm" style="display:none;">
         <input type="file" name="image"/>
     </form>
-
-
-    <!--<div id="videoCanvas">
-      <video id="camera" autoplay></video>
-      <image name="captured"/>
-    </div>
-
-    <div>  
-        <textarea id="chatbox"></textarea>
-    </div>
-
-    <div id="buttons">
-      <button id="snap">Snap</button>
-      <br/>
-      <button id="send">Send Picture</button>
-      <br/>
-      <button id="sendPicture">Send Message</button>
-    </div>-->
 </body>
 <script src="/socket.io/socket.io.js"></script>
 <script src="js/lib/adapter.js"></script>
 <script src="js/lib/common.js"></script>
+<script src="js/chat-ui.js"></script>
 <script src="js/subject.js"></script>
 </html>
